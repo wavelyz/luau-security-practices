@@ -6,11 +6,11 @@ This is just a guide post researched by like 20 AI models so, do the research yo
 
 ## The basics you can't skip
 
-Never trust anything that comes from a client. Every RemoteEvent, every RemoteFunction—treat it as hostile until you prove it's safe.
+Never trust anything that comes from a client. Every RemoteEvent, every RemoteFunction, treat it as hostile until you prove it's safe.
 
 The server owns the truth. All game state, all decisions, live there. The client just shows what the server says.
 
-**Avoid yielding in remote handlers when possible.** If a handler must do expensive or independent work, wrap *that* work in `task.spawn()`—not every handler by default.
+**Avoid yielding in remote handlers when possible.** If a handler must do expensive or independent work, wrap *that* work in `task.spawn()`, not every handler by default.
 
 | Universal `task.spawn()` | Selective `task.spawn()` |
 |--------------------------|--------------------------|
@@ -43,7 +43,7 @@ These get conflated constantly. Both matter; they solve different problems.
 | **Authentication** | *Who is this?* | `player.UserId`, session identity from Roblox |
 | **Authorization** | *Are they allowed to do this?* | Staff list, rank check, owns-item check, cooldown, game-state gate |
 
-Authentication is mostly free on Roblox—the platform tells you who fired the remote. Authorization is where games get exploited: assuming "they're a real player" means "they can do anything."
+Authentication is mostly free on Roblox, the platform tells you who fired the remote. Authorization is where games get exploited: assuming "they're a real player" means "they can do anything."
 
 ```lua
 -- AuthN: Roblox gives you plr.UserId for free
@@ -101,20 +101,20 @@ How to turn it on:
    * NextGenerationReplication = true
 3. Open Workspace → Server Authority → set AuthorityMode = Server
 
-Remember: you can't publish yet while it's in beta, and the APIs might shift. Even with Server Authority on you still need to validate every input—don't skip sanity checks.
+Remember: you can't publish yet while it's in beta, and the APIs might shift. Even with Server Authority on you still need to validate every input, don't skip sanity checks.
 
 ---
 
 ## Locking down your remotes
 
-You can't stop an exploiter from firing a RemoteEvent�tools like RemoteSpy let them see and copy anything. **Remote names and locations are not security boundaries.** Determined exploiters will find runtime-created remotes too.
+You can't stop an exploiter from firing a RemoteEvent, tools like RemoteSpy let them see and copy anything. **Remote names and locations are not security boundaries.** Determined exploiters will find runtime-created remotes too.
 
 Real protection lives in:
 
-* **Validation** � type, range, allow-list, game-state checks on every argument
-* **Authorization** � who may call this, when, and under what conditions
-* **Rate limiting** � server-side cooldowns and spam caps
-* **Server authority** � the server decides outcomes; the client only requests
+* **Validation**, type, range, allow-list, game-state checks on every argument
+* **Authorization**, who may call this, when, and under what conditions
+* **Rate limiting**, server-side cooldowns and spam caps
+* **Server authority**, the server decides outcomes; the client only requests
 
 Creating remotes at runtime (instead of leaving them in ReplicatedStorage at publish time) may slightly slow down inexperienced attackers, but treat that as **organization and defense-in-depth**, not obscurity-as-security.
 
@@ -133,7 +133,7 @@ end
 return Remotes
 ```
 
-### Type checks – do them every time
+### Type checks, do them every time
 ```lua
 RE.Move.OnServerEvent:Connect(function(plr, dir, speed)
     if typeof(dir) ~= "Vector3" or typeof(speed) ~= "number" then
@@ -143,7 +143,7 @@ RE.Move.OnServerEvent:Connect(function(plr, dir, speed)
 end)
 ```
 
-### Table arguments – only touch what you need
+### Table arguments, only touch what you need
 ```lua
 RE.Buy.OnServerEvent:Connect(function(plr, payload)
     if typeof(payload) ~= "table" then return end
@@ -162,11 +162,11 @@ end)
 
 ## Keep your important code hidden
 
-Put every server-side script—anti-exploit logic, economy handlers, remote modules—inside **ServerScriptService**. Never replicate it.
+Put every server-side script, anti-exploit logic, economy handlers, remote modules, inside **ServerScriptService**. Never replicate it.
 
 ModuleScripts go there too; `require()` them from server code.
 
-Luau compiles to bytecode which already gives you a bit of obscurity for free. If you want extra layers, tools like luax, luac, or bytenode exist—but **never lean on obfuscation as your only defense.**
+Luau compiles to bytecode which already gives you a bit of obscurity for free. If you want extra layers, tools like luax, luac, or bytenode exist, but **never lean on obfuscation as your only defense.**
 
 If a script handles money, stats, or anything that matters, assume an attacker can read it and build accordingly.
 
@@ -256,10 +256,10 @@ end)
 
 Design notes:
 
-* **Per-remote, per-player** — a global cooldown on one action shouldn't block unrelated actions.
-* **Silent ignore vs kick** — spam on gameplay remotes: ignore. Sustained abuse or impossible call rates: log and escalate.
-* **Cooldown before work** — set the timestamp *after* validation passes, or attackers burn cooldowns on rejected junk.
-* **Stateful actions** — purchases, trades, and ability casts need cooldown *and* authorization, not just a timer.
+* **Per-remote, per-player**, a global cooldown on one action shouldn't block unrelated actions.
+* **Silent ignore vs kick**, spam on gameplay remotes: ignore. Sustained abuse or impossible call rates: log and escalate.
+* **Cooldown before work**, set the timestamp *after* validation passes, or attackers burn cooldowns on rejected junk.
+* **Stateful actions**, purchases, trades, and ability casts need cooldown *and* authorization, not just a timer.
 
 ---
 
@@ -269,15 +269,14 @@ Rate limits stop floods; telemetry tells you *who* is probing and *what* they're
 
 Log (at minimum):
 
-* rejected requests — bad type, out of range, unauthorized
-* sustained spam — same remote fired above threshold in a window
-* honeypot hits — see below
-* impossible sequences — buy before shop open, trade item you don't own
+* rejected requests, bad type, out of range, unauthorized
+* sustained spam, same remote fired above threshold in a window
+* honeypot hits, see below
+* impossible sequences, buy before shop open, trade item you don't own
 
 ```lua
 local function logSuspicious(plr, reason, detail)
-    warn(string.format("[anti-exploit] %s (%d): %s %s",
-        plr.Name, plr.UserId, reason, detail or ""))
+    warn(string.format("[anti-exploit] %s (%d): %s %s", plr.Name, plr.UserId, reason, detail or ""))
     -- plug in your analytics / moderation webhook here
 end
 ```
@@ -286,7 +285,7 @@ Use logs to tune thresholds and review before auto-banning. Kicking on the first
 
 ---
 
-## Remote direction – organization, not a security boundary
+## Remote direction, organization, not a security boundary
 
 Using separate remotes for Client→Server vs Server→Client can improve clarity and make misuse easier to spot during code review. Roblox does not require this pattern, and direction enforcement alone does not stop exploiters who fire your C2S remotes with bad payloads.
 
@@ -294,9 +293,7 @@ Treat this as **recommended organization**, not mandatory security:
 
 ```lua
 local REMOTE_DIR = {
-    JoinEvent = "C2S",
-    PingEvent = "S2C",
-}
+    JoinEvent = "C2S", PingEvent = "S2C", }
 
 for name, dir in REMOTE_DIR do
     local r = ReplicatedStorage.Remotes:FindFirstChild(name)
@@ -311,7 +308,7 @@ end
 
 ### Honeypot remotes
 
-Drop a RemoteEvent with a tempting name like `GiveAdminPerms` into `ReplicatedStorage.Remotes`. On the server, **log** the attempt—UserId, timestamp, any arguments.
+Drop a RemoteEvent with a tempting name like `GiveAdminPerms` into `ReplicatedStorage.Remotes`. On the server, **log** the attempt, UserId, timestamp, any arguments.
 
 ```lua
 RE.GiveAdminPerms.OnServerEvent:Connect(function(plr, ...)
@@ -335,9 +332,9 @@ Most real-world Roblox exploits target **economy**, not movement. Assume attacke
 
 Patterns that help:
 
-**Server-owned ledger** — currency and items live in server tables or DataStores; the client displays a copy.
+**Server-owned ledger**, currency and items live in server tables or DataStores; the client displays a copy.
 
-**Idempotent grants** — track transaction IDs or "already claimed" flags so the same action can't pay out twice.
+**Idempotent grants**, track transaction IDs or "already claimed" flags so the same action can't pay out twice.
 
 ```lua
 local pendingClaims = {}   -- [userId][claimId] = true
@@ -352,22 +349,22 @@ local function claimOnce(plr, claimId, grantFn)
 end
 ```
 
-**Validate ownership before mutate** — never `table.insert(inventory, item)` because the client said so; check the server inventory first.
+**Validate ownership before mutate**, never `table.insert(inventory, item)` because the client said so; check the server inventory first.
 
-**Atomic-ish updates** — read inventory → validate → write inventory in one server flow; don't yield between check and grant without a lock/claim flag.
+**Atomic-ish updates**, read inventory → validate → write inventory in one server flow; don't yield between check and grant without a lock/claim flag.
 
 ---
 
 ## Replay attacks
 
-A replay is firing a *valid-looking* request again to get the benefit twice—re-triggering a quest complete, re-claiming a daily reward, re-selling the same item.
+A replay is firing a *valid-looking* request again to get the benefit twice, re-triggering a quest complete, re-claiming a daily reward, re-selling the same item.
 
 Mitigations:
 
-* **One-time tokens** — server generates a nonce per action; client returns it; server consumes it
-* **Monotonic counters** — server tracks last processed action ID per player
-* **Time windows** — daily rewards keyed to server date + already-claimed set
-* **State gates** — "quest complete" remote rejects if quest isn't in completable state
+* **One-time tokens**, server generates a nonce per action; client returns it; server consumes it
+* **Monotonic counters**, server tracks last processed action ID per player
+* **Time windows**, daily rewards keyed to server date + already-claimed set
+* **State gates**, "quest complete" remote rejects if quest isn't in completable state
 
 ```lua
 RE.CompleteQuest.OnServerEvent:Connect(function(plr, questId)
@@ -385,11 +382,11 @@ end)
 
 DataStores are a trust boundary between sessions and the live server. Treat every read/write as exploitable if triggered by client requests.
 
-* **Never write on client request alone** — validate the change against server state first
-* **Rate-limit saves** — burst writes hit limits and lose data; batch where possible
-* **Session locking** — one active session per user for economy-critical games
-* **Retry with backoff** — `pcall` + retry for genuine service errors, not as exploit detection
-* **Version or migrate carefully** — dupes often come from reading stale cache, writing twice, or rollback after grant
+* **Never write on client request alone**, validate the change against server state first
+* **Rate-limit saves**, burst writes hit limits and lose data; batch where possible
+* **Session locking**, one active session per user for economy-critical games
+* **Retry with backoff**, `pcall` + retry for genuine service errors, not as exploit detection
+* **Version or migrate carefully**, dupes often come from reading stale cache, writing twice, or rollback after grant
 
 ```lua
 local saveCooldown = {}
@@ -417,21 +414,19 @@ Sketch:
 1. Server builds trade offer from **server inventories** only
 2. Both players accept the same trade ID
 3. Re-validate ownership and quantities at commit time
-4. Swap atomically in one server function—no yield between remove and add
+4. Swap atomically in one server function, no yield between remove and add
 5. Log completed trades for dispute review
 
 Permission / role management:
 
-* Store roles server-side (group rank, config table, DataStore)—never trust a client "isAdmin" flag
+* Store roles server-side (group rank, config table, DataStore), never trust a client "isAdmin" flag
 * Separate **commands** (what staff can run) from **ranks** (who they are)
 * Audit log privileged actions
 * Prefer Roblox group roles or a maintained allow-list over hard-coded UserIds in scattered scripts
 
 ```lua
 local RolePermissions = {
-    mod = { "kick", "mute" },
-    admin = { "kick", "mute", "ban", "giveItem" },
-}
+    mod = { "kick", "mute" }, admin = { "kick", "mute", "ban", "giveItem" }, }
 
 local function canRun(plr, action)
     local role = getServerRole(plr)   -- from group API or server config
@@ -442,7 +437,7 @@ end
 
 ---
 
-## Where things live – quick reference
+## Where things live, quick reference
 
 | Folder | Visible to client? | Put what here |
 |--------|--------------------|---------------|
@@ -514,7 +509,7 @@ CAS:BindAction("Shoot", function(name, state, inp)
 end, false, Enum.KeyCode.ButtonR2, Enum.KeyCode.MouseButton1)
 ```
 
-Server side – still verify!
+Server side, still verify!
 ```lua
 ShootRE.OnServerEvent:Connect(function(plr, aimPos)
     if typeof(aimPos) ~= "Vector3" then return end
@@ -539,24 +534,24 @@ Treat IAS data like any other remote: run the same type, range, and sanity check
 
 Glance at this before you hit Publish:
 
-- Never trust the client — validate every Remote/Function argument
-- Server is the source of truth — authoritative state lives server-side
+- Never trust the client, validate every Remote/Function argument
+- Server is the source of truth, authoritative state lives server-side
 - Avoid yielding in remote handlers; use `task.spawn()` selectively for expensive work
-- Remote names/locations are not security — validate, authorize, rate-limit
+- Remote names/locations are not security, validate, authorize, rate-limit
 - Type-check every argument with `typeof()`
 - Validate table arguments: use only needed keys, cap size
 - Separate C2S and S2C remotes for clarity (optional, not a security silver bullet)
 - Honeypot remotes: log first; auto-ban only with review or graduated responses
 - Rate-limit remotes on the server (`os.clock`, per-player, per-remote)
 - Design cooldowns before grant, not just after spam
-- Log suspicious traffic — tune thresholds from telemetry
+- Log suspicious traffic, tune thresholds from telemetry
 - Guard economy: idempotent grants, claim flags, server-owned inventory
 - Mitigate replays: state gates, one-time tokens, monotonic action IDs
 - DataStore writes from server state only; rate-limit saves
 - Trades: re-validate at commit, atomic swap, audit log
 - Roles/permissions: server-side, allow-list actions, audit privileged use
 - Keep anti-exploit/economy code in ServerScriptService only
-- Use the Input Action System for trusted client input — still verify!
+- Use the Input Action System for trusted client input, still verify!
 - Never use `pcall` as an exploit detection mechanism
 - Apply distance, allow-list, and authorization patterns where relevant
 - If targeting Server Authority, enable it per the beta steps; otherwise manually validate movement-related remotes
