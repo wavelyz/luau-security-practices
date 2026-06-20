@@ -1,6 +1,8 @@
 # luau-security-practices
 
-Hey, 2cages here. Your Roblox game is probably wide open right now. Let’s plug the holes—fast, no fluff.
+Hey, 2cages here. Your Roblox game is probably wide open right now. Let's plug the holes—fast, no fluff.
+
+This is just a guide post researched by like 20 AI models so, do the research yourself, sources are cited at the bottom.
 
 ---
 
