@@ -2,6 +2,8 @@
 
 Practical, opinionated Roblox–Luau security guide: what to lock down, why, and how to do it in 10 minutes or less.
 
+If you’ve ever wondered how to keep your Roblox game safe from exploiters without drowning in theory, this guide is for you. Think of it as a quick‑read cheat sheet that walks you through the most effective, battle‑tested practices—straight from the DevForum, official docs, and hard‑won experience.
+
 <!-- TOC placeholder — sections start below -->
 
 1. [Absolute Foundations](#absolute-foundations)
@@ -21,40 +23,43 @@ Practical, opinionated Roblox–Luau security guide: what to lock down, why, and
 
 ## Absolute Foundations
 
-These are non-negotiable. They are framework basics, not advanced tricks.
+These are the non‑negotiable basics that every Roblox developer should internalize before writing a single line of game logic.
 
-- **FilteringEnabled is on.** It ships enabled now; nothing replicates client → server without an explicit RemoteEvent/RemoteFunction. If you are still using "Experimental Mode", convert immediately.
-- **Never trust the client.** Not even a little. Any data received via a RemoteEvent/RemoteFunction is hostile until verified.
-- **ServerOwner = source of truth.** The server holds state — the client only displays it.
-- **Use `task.spawn()` inside remote handlers** to prevent yielding/queue-exhaustion panics if a handler accidentally yields.
+- **Never trust the client.** Any data that arrives via a RemoteEvent or RemoteFunction is hostile until you verify it.
+- **The server is the source of truth.** All authoritative state lives on the server; the client merely displays it.
+- **Always wrap remote handlers in `task.spawn()`** to avoid yielding or queue‑exhaustion panics if something accidentally yields.
+
+> *Note:* FilteringEnabled has been on by default for years and cannot be turned off, so you don’t need to worry about it—just assume client‑to‑server replication only happens through your explicit remotes.
 
 ---
 
 ## The Client–Server Model
 
-### Roles, one sentence each
-| Side | Job |
-|------|-----|
-| Server | All game logic, validaton, authoritative state |
-| Client | Input collection, visual effects, mock-lag prediction |
+### Who does what?
 
-Everything client-created vanishes on cleanup. Anything replicated must be created on the server.
+| Side | Responsibility |
+|------|----------------|
+| **Server** | Runs all game logic, validates input, holds the authoritative state |
+| **Client** | Collects input, plays visual effects, runs local‑only predictions |
 
-### Action, not request
-The canonical pattern: client **requests** an action, the server **performs** it or **refuses** it.
+Anything the client creates on its own disappears when the player leaves; only server‑created instances replicate.
+
+### The request‑action pattern
+
+The cleanest way to think about communication is: the client **requests** an action, and the server **performs** it—or refuses it.
 
 ```lua
--- ❌ BAD — client dictates outcome
+-- ❌ BAD – letting the client decide the outcome
 RE.AddCash.OnServerEvent:Connect(function(player, amount)
-    player.leaderstats.Cash.Value += amount  -- definitely gonna have a bad time
+    player.leaderstats.Cash.Value += amount  -- exploiter’s dream
 end)
 
--- ✅ GOOD — client requests, server enforces
+-- ✅ GOOD – client asks, server decides
 RE.RequestPickup.OnServerEvent:Connect(function(player, pickupId)
     local part = workspace:FindFirstChild(pickupId)
     if not part then return end
-    part:Destroy()  -- server owns the destroy
-    player.leaderstats.Cash.Value += 5  -- value came from server, not client
+    part:Destroy()               -- server owns the destroy
+    player.leaderstats.Cash.Value += 5  -- reward comes from server config
 end)
 ```
 
@@ -62,41 +67,44 @@ end)
 
 ## Server Authority
 
-Roblox's Server Authority system is in early access. It eliminates common categories of exploits (speedhacks, noclip, fly, direct position/velocity manipulation) by making the **server the only thing that can move a character**.
+Roblox’s Server Authority (still in early access) flips the script: the server becomes the **only** entity that can move a character. This shuts down whole classes of exploits—speedhacks, flyhacks, noclip—by removing the client’s ability to set position or velocity directly.
 
-### What one sentence
-Server authority lets the server validate all player input and all movement math. Clients no longer "own" their position and cannot set it directly.
+### What it means in one sentence
+Server authority lets the server validate every piece of player input and every movement calculation; clients can only *predict* locally for smooth visuals.
 
 ### Why it matters
-- Speedhacks require client to set velocity directly → blocked
-- Flyhacks require teleport/weld to invisible parts → blocked
-- Noclip requires disabling collision locally → blocked at intersection with replication
+- **Speedhacks** require the client to set velocity → blocked
+- **Flyhacks** rely on teleporting or welding to invisible parts → blocked
+- **Noclip** tries to disable collision locally → blocked at the replication level
 
-### Enabling it
-1. File > Beta Features > **Server Authority Core API**
-2. Workspace → `StreamingEnabled = true`, `UseFixedSimulation = true`, `NextGenerationReplication = true`
-3. Workspace → Server Authority → `AuthorityMode = Server`
+### Getting it running (early access)
+1. Enable **Server Authority Core API** via *File > Beta Features*.
+2. Set these Workspace properties:
+   - `StreamingEnabled = true`
+   - `UseFixedSimulation = true`
+   - `NextGenerationReplication = true`
+3. In Workspace → Server Authority, set `AuthorityMode = Server`.
 
-⚠️ In early access — not publishable. APIs are unstable.
+⚠️ Remember: this is still early access—games using it cannot be published yet, and the APIs may change.
 
-### With/Without Server Authority
-- **Without Server Authority:** you must manually reject all movement-based remotes
-- **With Server Authority:** you can't touch the character physically at all; only server-set inputs move it
+### With vs. without Server Authority
+- **Without it:** you must manually reject any movement‑based remotes.
+- **With it:** you can’t touch the character physically at all; only server‑driven inputs move it.
 
-Either way, always validate your inputs.
+Either way, *always* validate your inputs—Server Authority doesn’t replace sanity checks.
 
 ---
 
-## Lock Down RemoteEvents / RemoteFunctions
+## Locking Down RemoteEvents / RemoteFunctions
 
 ### The hard truth
-There is **no way** to stop a client from firing a RemoteEvent. Tools like RemoteSpy let exploiters read, copy, and fire anything.  
-Security happens in two places:
-1. **Where remotes exist** (hide them)
-2. **What they accept** (validate everything)
+You cannot stop a determined exploiter from firing a RemoteEvent; tools like RemoteSpy let them read, copy, and invoke anything. Real security happens in two places:
 
-### Create remotes server-side
-Instead of placing RemoteEvents in ReplicatedStorage, create them from a ModuleScript in ServerScriptService and parent them to a hidden folder at runtime.
+1. **Where the remotes live** (keep them hidden)
+2. **What they accept** (validate every argument)
+
+### Create remotes on the server
+Instead of dropping RemoteEvents into ReplicatedStorage at publish time, generate them from a ModuleScript in ServerScriptService and parent them to a hidden folder at runtime.
 
 ```lua
 -- ServerScriptService/RemoteConfig.luau
@@ -107,18 +115,18 @@ local Remotes = {}
 function Remotes.create(name, isClientToServer)
     local remote = Instance.new("RemoteEvent")
     remote.Name = name
-    remote.Parent = ReplicatedStorage.Remotes -- hidden container
-    -- direction bookkeeping happens here if you want (see §9)
+    remote.Parent = ReplicatedStorage.Remotes   -- hidden container
+    -- (optional) track direction here – see §9
     return remote
 end
 
 return Remotes
 ```
 
-The key win: RemoteSpy shows nothing in ReplicatedStorage at publish time. Exploiters cannot discover what you named your remotes without runtime inspection (still bypassable — defense in depth).
+The payoff: RemoteSpy shows an empty `ReplicatedStorage.Remotes` at publish time, forcing exploiters to guess names or inspect at runtime—defense in depth.
 
-### Type checking — the absolute minimum
-Use `typeof()` on every argument, every time.
+### Type checking – the bare minimum
+Validate **every** argument with `typeof()`, every single time.
 
 ```lua
 CacheInputRE.OnServerEvent:Connect(function(player, key: string, state: boolean)
@@ -126,79 +134,80 @@ CacheInputRE.OnServerEvent:Connect(function(player, key: string, state: boolean)
         player:Kick("Invalid action parameters")
         return
     end
-    -- process
+    -- …process the request
 end)
 ```
 
 ### Table argument validation
-Tables are where exploits most often hide. Two rules:
-- Validate **each index you actually use**, don't iterate blindly over the whole table
-- Reject extremely large tables; cap length with `table.maxn` for arrays
+Tables are where exploits love to hide malicious payloads. Two simple rules:
+- Only validate the indices you actually **use**—don’t blindly iterate over the whole table.
+- Reject absurdly large tables; cap length with `table.maxn` for arrays.
 
 ```lua
 BuyItemRE.OnServerEvent:Connect(function(player, payload)
     if typeof(payload) ~= "table" then return end
     if typeof(payload.ItemId) ~= "string" then return end
-    if #payload > 10 then return end  -- bizarrely large? reject
-    -- proceed
+    if #payload > 10 then return end   -- wildly oversized? drop it
+    -- …process the purchase
 end)
 ```
 
 ---
 
-## Copy-Proof Your Important Scripts
+## Making Important Scripts Hard to Copy
 
-- **Server-side scripts only live in ServerScriptService** — never replicated.
-- **Move ModuleScripts into ServerScriptService** before implementation, use them via `require()` from server scripts.
-- **Luau is compiled bytecode**, not plain Lua — it offers mild obfuscation without runtime cost.
-- **Obfuscation tools** add another layer (e.g. luax, luac, bytenode ship workflows) but never rely on obfuscation as the security boundary.
+- Keep **all server‑side code** in `ServerScriptService`—never replicated.
+- Place **ModuleScripts** there too and `require()` them from server scripts.
+- Luau compiles to bytecode, which already offers light obfuscation at zero runtime cost.
+- If you want extra layers, tools like `luax`, `luac`, or `bytenode` exist—but never rely on obfuscation as your security boundary.
 
-Rule of thumb: if a script contains anti-exploit or critical economy logic, assume the client can see it and design accordingly.
+**Rule of thumb:** If a script handles anti‑exploit logic, economy, or anything critical, assume the client can see it and design accordingly.
 
 ---
 
-## Data Integrity: Never Trust The Client
+## Data Integrity: Never Trust the Client
 
-This pattern prevents 80% of all client exploit impact.
+This single pattern stops roughly 80 % of typical exploit impact.
 
 ```lua
--- ❌ NEVER: server lets client name the target
+-- ❌ NEVER – letting the client name the target and damage
 RE.FireAt.OnServerEvent:Connect(function(player, targetInstance, damage)
     targetInstance.Humanoid:TakeDamage(damage)
 end)
 
--- ✅ ALWAYS: server looks up the target itself, clamps from server config
+-- ✅ ALWAYS – server looks up the target and uses its own values
 RE.RequestAttack.OnServerEvent:Connect(function(player, targetName)
     local target = workspace.Enemies:FindFirstChild(targetName)
     if not target then return end
 
     local dist = (target.HumanoidRootPart.Position -
                   player.Character.HumanoidRootPart.Position).Magnitude
-    if dist > 25 then return end  -- long-range kill blocked
+    if dist > 25 then return end   -- long‑range kill blocked
 
-    target.Humanoid:TakeDamage(ServerConfig.BASE_DAMAGE)  -- server value
+    target.Humanoid:TakeDamage(ServerConfig.BASE_DAMAGE)  -- server‑defined
 end)
 ```
 
-**No sensitive number ever travels "up" from client → server.** The client only says *"I want to do the thing"*, and the server decides *"you're allowed, here's how it resolves"*.
+**Never** let a sensitive number (damage, currency, stats) travel *up* from client to server. The client only says *“I want to do the thing”* and the server decides *“you’re allowed, here’s how it resolves.”*
 
 ---
 
-## Sanity / Edge-Case Checking
+## Sanity / Edge‑Case Checking
 
-Tied heavily to §5, but expanded here.
+Think of these as the extra locks on your door.
 
-| Check | Tool | When |
-|-------|------|------|
-| Is it an Instance / model, is it descendant of workspace? | `type`, `.IsDescendantOf()` | User sent an object |
-| Is number between 0 and sane max? | `<`, `math.clamp` | Dmg, speed, count |
-| Is string short enough / in allowlist? | `string.len`, `table.find` | Keys, names |
-| Is table length bounded? | `table.maxn` | Inventory arrays |
-| No NaN / `math.huge` / negative? | `~isnan`, range comparison | Matrix math inputs |
-| Call occurs in expected state? | Zustand / server context check | Round is active |
+| Check | How to do it | When it matters |
+|-------|--------------|-----------------|
+| Is it an Instance/descendant of workspace? | `typeof(obj) == "Instance"` and `obj:IsDescendantOf(workspace)` | User sent an object |
+| Is a number in a sane range? | `<`, `>`, `math.clamp` | Damage, speed, count |
+| Is a string short enough or in an allowlist? | `string.len`, `table.find` | Keys, names, commands |
+| Is a table length bounded? | `table.maxn` | Inventory arrays, lists |
+| No NaN / `math.huge` / negative? | `~isnan`, explicit range checks | Any math input |
+| Does the call fit the current game state? | Compare against a round‑state variable | Only allow during active rounds, not in lobby |
+
+**NaN‑check helper** (worth copying into a utility module):
 
 ```lua
--- NaN check snippet worth having on hand
 local function isSafeNumber(n: number): boolean
     return typeof(n) == "number"
         and not (nan(n) or n == math.huge or n == -math.huge)
@@ -210,10 +219,10 @@ end
 
 ## Rate Limiting
 
-**The only valid rate limiter runs inside the remote handler, on the server, using your own tracked data.** Client-told cooldowns are a joke.
+The only rate limiter that actually works lives **inside** the remote handler, on the server, using your own tracked data. Client‑enforced cooldowns are trivial to bypass.
 
 ```lua
-local COOLDOWN_S = 0.2
+local COOLDOWN_S = 0.2          -- tweak per‑remote as needed
 local RemoteCooldown = {}
 
 game.Players.PlayerAdded:Connect(function(p)
@@ -224,18 +233,16 @@ game.Players.PlayerRemoving:Connect(function(p)
 end)
 
 RE.OnServerEvent:Connect(function(player, ...)
-    local now = os.clock()
+    local now = os.clock()               -- monotonic, immune to NTP jumps
     if now - RemoteCooldown[player.UserId] < COOLDOWN_S then
-        return  -- silently ignore
+        return                           -- silently ignore excess fires
     end
     RemoteCooldown[player.UserId] = now
-    -- ... process
+    -- …process the legitimate request
 end)
 ```
 
-Why `os.clock()` over `tick()`? `tick()` is wall-clock; `os.clock()` is monotonically increasing — no NTP drift resets throw off the cooldown.
-
-### Table-based alternative (no per-player storage)
+### Table‑based alternative (no per‑player storage)
 ```lua
 local Waiters = {}
 
@@ -246,21 +253,21 @@ RE.OnServerEvent:Connect(function(player, ...)
         task.wait(COOLDOWN_S)
         Waiters[player.UserId] = nil
     end)
-    -- ... process
+    -- …process
 end)
 ```
 
 ---
 
-## Remote Direction Enforcing
+## Enforcing Remote Direction
 
-Every RemoteEvent has exactly one job: C2S or S2C. Never both.
+Every RemoteEvent should have **exactly one** job: either Client→Server **or** Server→Client—never both. Mixing directions is a dead giveaway of exploitation.
 
 ```lua
 local REMOTE_DIRECTIONS = {
     PlayerJoinCE = "C2S",
     PingRE       = "S2C",
-    -- ...
+    -- add the rest of your remotes here
 }
 
 for name, dir in REMOTE_DIRECTIONS do
@@ -268,36 +275,37 @@ for name, dir in REMOTE_DIRECTIONS do
     if remote then
         remote.OnServerEvent:Connect(function(player, ...)
             if dir == "S2C" then
-                player:Kick("Direction violation")  -- fired C2S on S2C
+                player:Kick("Direction violation")   -- fired C2S on an S2C‑only remote
             end
-            -- process
+            -- …process legitimate C2S traffic
         end)
     end
 end
 ```
 
-Combined with a "honeypot" trick: add a RemoteEvent named something tempting like `GrantAdminRE` to ReplicatedStorage; on server, make it directly call `player:Kick()` + log. The first thing every exploiter does is fire every remote; this catches them before your gameplay logic even starts.
+### The honeypot trick
+Add a deliberately tempting RemoteEvent—say, `GiveAdminPermissions`—to `ReplicatedStorage.Remotes`. On the server, make it immediately kick (or ban) and log the offender. Since most exploiters start by firing every remote they can find, this catches them before they even reach your real gameplay logic.
 
 ---
 
-## Instances: ReplicatedStorage vs ServerScriptService vs PlayerScripts
+## Where Things Live: ReplicatedStorage vs ServerScriptService vs PlayerScripts
 
-| Location | Visible to client? | When to put what there |
-|----------|--------------------|-----------------------|
-| **ServerScriptService** | **No** | All anti-exploit code, economy logic, remote handlers |
+| Location | Visible to client? | What belongs here |
+|----------|--------------------|-------------------|
+| **ServerScriptService** | **No** | All anti‑exploit code, economy logic, remote handlers |
 | **ReplicatedStorage** | **Yes** | RemoteEvent/Function definitions, shared data tables, assets |
-| **PlayerScripts** | Per-player: yes | LocalScripts, InputAction setup |
-| **StarterPlayerScripts** | Per-player yes (on spawn) | Default client scripts |
+| **PlayerScripts** | Per‑player: yes | LocalScripts, InputAction setup |
+| **StarterPlayerScripts** | Per‑player (on spawn) | Default client scripts |
 
-Core rule: if the client has any use for it, assume exploiters can read it. Anti-exploit logic belongs server-only.
+**Core rule:** If the client has any legitimate use for something, assume an exploiter can read it. Keep your security‑critical code strictly in `ServerScriptService`.
 
 ---
 
-## Anti-Exploit Patterns
+## Proven Anti‑Exploit Patterns
 
-### 1. Distance-sanity on any "interact with X" request
+### 1. Distance sanity on any “interact with X” request
 ```lua
-local MAX_INTERACT_DIST = 12
+local MAX_INTERACT_DIST = 12   -- tweak to your game’s feel
 
 local function raidDistanceValid(player: Player, target: Instance): boolean
     local char = player.Character
@@ -309,17 +317,17 @@ local function raidDistanceValid(player: Player, target: Instance): boolean
 end
 ```
 
-### 2. Allowed-values allowlist instead of raw comparison
+### 2. Allow‑list instead of raw comparison
 ```lua
 local ALLOWED_ITEMS = {"sword", "potion", "shield"}
 
 RE.BuyItem.OnServerEvent:Connect(function(player, itemName)
     if not table.find(ALLOWED_ITEMS, itemName) then return end
-    -- safe to process
+    -- safe to process the purchase
 end)
 ```
 
-### 3. Admin/privileged remotes — UserId gate
+### 3. Admin/privileged remotes – UserId gate
 ```lua
 local ADMIN_IDS = {123456, 789012}
 
@@ -330,80 +338,78 @@ RE.AdminCommand.OnServerEvent:Connect(function(player)
 end)
 ```
 
-### 4. Walking away from `pcall` as "security"
-`pcall` swallows errors. Never use `pcall` as a detection mechanism. Errors inside `pcall` do not indicate tampering — they indicate something went wrong, and silently absorbing them lets exploits pass under the radar.
+### 4. Avoid using `pcall` as a security mechanism
+`pcall` merely catches errors; it does **not** tell you whether the client is tampering. Swallowing errors silently can actually hide exploits. Use `pcall` only for genuine error safety (e.g., HTTP requests), never as an exploit detector.
 
-### 5. The honeypot remote
-```lua
--- A deliberately tempting remote that no real player would ever find:
-local HONEYPOT = Instance.new("RemoteEvent")
-HONEYPOT.Name = "GiveAdminPermissions"
-HONEYPOT.Parent = ReplicatedStorage.Remotes
-HONEYPOT.OnServerEvent:Connect(function(player)
-    -- directly to moderation: log + kick/ban
-    player:Kick("Remote firewall triggered")
-    -- log to DataStore/discord webhook etc
-end)
-```
+### 5. The honeypot remote (see §9)
+A deliberately named remote that no honest player would ever encounter, tied directly to kick/ban/logic.
 
 ---
 
-## Input Action System (IAS)
+## Input Action System (IAS) – the trusted client path
 
-### What it is
-The Input Action System (IAS) is the client-side input event system that feeds trusted data into the server. Outside IAS, data is cancer.
+The Input Action System is the **only** client‑to‑server channel that Roblox marks as trusted. Anything outside IAS (e.g., raw RemoteEvents you create yourself) must be treated as hostile.
 
+### Client side (LocalScript)
 ```lua
--- client (LocalScript)
 local ContextActionService = game:GetService("ContextActionService")
 
-local InputAction = ContextActionService:BindAction("PlayerShoot", function(actionName, inputState, input)
-    if inputState == Enum.UserInputState.Begin then
-        ShootRE:FireServer(input.Position)
-    end
-    return Enum.ContextActionResult.Sink
-end, false, Enum.KeyCode.ButtonR2, Enum.KeyCode.MouseButton1)
+local InputAction = ContextActionService:BindAction(
+    "PlayerShoot",
+    function(actionName, inputState, input)
+        if inputState == Enum.UserInputState.Begin then
+            ShootRE:FireServer(input.Position)
+        end
+        return Enum.ContextActionResult.Sink
+    end,
+    false,                -- not create touch button
+    Enum.KeyCode.ButtonR2, Enum.KeyCode.MouseButton1
+)
 ```
 
-### Server-side handling pattern
+### Server side – still validate!
 ```lua
 ShootRE.OnServerEvent:Connect(function(player, aimPos: Vector3)
     if typeof(aimPos) ~= "Vector3" then return end
     if typeof(player.Character) ~= "Model" then return end
 
-    -- Range clamp, do not trust client's exact vector
-    local state = ServerProjectileHandler.spawn(
-        player,
-        player.Character.HumanoidRootPart.Position,
-        (aimPos - player.Character.HumanoidRootPart.Position).Unit
-    )
+    -- Even “trusted” IAS input needs range checks
+    local launchPos = player.Character.HumanoidRootPart.Position
+    local direction = (aimPos - launchPos).Unit
+
+    local state = ServerProjectileHandler.spawn(player, launchPos, direction)
 end)
 ```
 
-Important: even "trusted" IAS inputs must be range-checked, like any remote. Sanity checks don't go away.
+**Bottom line:** treat IAS data like any other remote—apply the same type, range, and sanity checks.
 
 ---
 
-## Quick Checklist (print-mode, run before publish)
+## Quick Pre‑Publish Checklist
+
+Run through this before you hit *Publish*:
 
 ```
-[ ] FilteringEnabled: true (no Experimental Mode)
-[ ] Server-side state exists and is authoritative
-[ ] Every RemoteEvent has type checks + sanity checks
-[ ] RemoteEvent table args length-capped + index-validated
-[ ] Rate limiter is active (≤ 0.2s per-player)
-[ ] Remote events are NOT in ReplicatedStorage by default
-[ ] Economy values never come from client; server computes them
-[ ] Sensitive remotes have UserId gate
-[ ] Honeypot remote(s) installed
-[ ] Sensitive scripts live in ServerScriptService only
-[ ] pcall is used for error safety, NOT as exploit detection
-[ ] Input Action System is wired up for anything touching gameplay
+[ ] Never trust the client – validate every Remote/Function argument
+[ ] Server is the source of truth – authoritative state lives server‑side
+[ ] Use task.spawn() inside remote handlers to avoid yield/queue issues
+[ ] Hide remotes: create them server‑side, not in ReplicatedStorage at publish time
+[ ] Type‑check every argument with typeof()
+[ ] Validate table arguments: only use needed indices, cap length with table.maxn
+[ ] Enforce remote direction (C2S or S2C only) – kick violators
+[ ] Install a honeypot remote (e.g., GiveAdminPermissions) to catch exploiters early
+[ ] Rate‑limit remotes on the server (≤0.2s per‑player, using os.clock)
+[ ] Keep anti‑exploit/economy code in ServerScriptService only
+[ ] Use the Input Action System for trusted client input – still verify!
+[ ] Never use pcall as an exploit detection mechanism
+[ ] Apply distance, allow‑list, and UserId‑gate patterns where relevant
+[ ] Confirm Server Authority is enabled (if targeting early access) or manually validate movement remotes
 ```
 
 ---
 
-## Sources and further reading
+## Sources & Further Reading
+
 - [Best way to protect RemoteEvents against exploiters? — DevForum](https://devforum.roblox.com/t/best-way-to-protect-remoteevents-against-exploiters/1314739)
 - [How to secure remote events better from exploiters? — DevForum](https://devforum.roblox.com/t/how-to-secure-remote-events-better-from-exploiters/554772)
 - [A Comprehensive Guide To Airtight Remote Security — DevForum](https://devforum.roblox.com/t/a-comprehensive-guide-to-airtight-remote-security/3079489)
@@ -415,4 +421,4 @@ Important: even "trusted" IAS inputs must be range-checked, like any remote. San
 
 ---
 
-*Built from first-party Roblox docs, DevForum consensus, and community synthesis. Last updated June 2026.*
+*Built from first‑party Roblox docs, DevForum consensus, and community synthesis. Last updated June 2026.*
