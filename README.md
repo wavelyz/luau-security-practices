@@ -1,14 +1,12 @@
 # luau-security-practices
 
-Hey, 2cages here. Your Roblox game is probably wide open right now. Let's plug the holes—fast, no fluff.
-
 This is just a guide post researched by like 20 AI models so, do the research yourself, sources are cited at the bottom.
 
 ---
 
 ## The basics you can’t skip
 
-Never trust anything that comes from a client. Every RemoteEvent, every RemoteFunction—treat it as hostile until you prove it’s safe.
+Never trust anything that comes from a client. Every RemoteEvent, every RemoteFunction, treat it as dangerous until you prove it’s safe.
 
 The server owns the truth. All game state, all decisions, live there. The client just shows what the server says.
 
@@ -18,7 +16,7 @@ Wrap every remote handler in `task.spawn()`. If something yields by accident you
 
 ## How client and server actually talk
 
-Think of it like this: the client **asks** for something to happen, the server **does** it—or says no.
+Think of it like this: the client **asks** for something to happen, the server **does** it, or says no.
 
 Bad example: letting the client decide numbers  
 ```lua
@@ -39,7 +37,7 @@ end)
 
 ---
 
-## Server Authority – the new shield (still early access)
+## Server Authority (still early access)
 
 If you’re in the Server Authority beta, the server now **alone** can move a character. No more client‑set velocity or position. That kills speed hacks, fly hacks, noclip out of the gate.
 
@@ -57,7 +55,7 @@ Remember: you can’t publish yet while it’s in beta, and the APIs might shift
 
 ## Locking down your remotes
 
-You can’t stop an exploiter from firing a RemoteEvent—tools like RemoteSpy let them see and copy anything. Real protection lives in two places:
+You can’t stop an exploiter from firing a RemoteEvent, tools like RemoteSpy let them see and copy anything. Real protection lives in two places:
 * where the remotes live (keep them hidden)
 * what they accept (check every argument)
 
@@ -104,11 +102,9 @@ end)
 
 ## Keep your important code hidden
 
-Put every server‑side script—anti‑exploit logic, economy handlers, remote modules—inside **ServerScriptService**. Never replicate it.
+Put every server‑side script, sanity checking logic, economy handlers, remote modules—inside **ServerScriptService**. Never replicate it.
 
 ModuleScripts go there too; `require()` them from server code.
-
-Luau compiles to bytecode which already gives you a bit of obscurity for free. If you want extra layers, tools like luax, luac, or bytenode exist—but never lean on obfuscation as your only defense.
 
 If a script handles money, stats, or anything that matters, assume an attacker can read it and build accordingly.
 
@@ -275,7 +271,7 @@ end)
 
 ---
 
-## Input Action System – the only trusted client path
+## Input Action System
 
 The Input Action System (IAS) is the channel Roblox marks as trusted. Anything outside IAS (your own RemoteEvents) stays hostile.
 
